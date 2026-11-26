@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import math
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -213,7 +214,8 @@ def fetch_yfinance_quotes(
             last_error = "Empty response returned by yfinance."
         except Exception as exc:  # noqa: BLE001
             last_error = str(exc)
-        time.sleep(0.8 * (attempt + 1))
+        if attempt < retries - 1:
+            time.sleep(0.5 * (attempt + 1))
 
     stale = terminal_cache.get(cache_key, allow_stale=True)
     if stale is not None:
@@ -580,16 +582,18 @@ def fetch_screener_data(
         return [], False, "No tickers"
 
     meta_map = {u["yf_ticker"]: u for u in universe_items}
-    cache_key = f"screener::{len(tickers)}::{hash(tuple(sorted(tickers)))}::{int(include_fundamentals)}"
+    sig = hashlib.sha256(",".join(sorted(tickers)).encode("utf-8")).hexdigest()[:16]
+    cache_key = f"screener::{len(tickers)}::{sig}::{int(include_fundamentals)}"
     cached = terminal_cache.get(cache_key, allow_stale=False)
     if cached is not None:
         return cached.data, False, cached.fetched_at_ist
 
     rows: List[Dict[str, Any]] = []
     chunk_size = 50
+    chunks = [tickers[i : i + chunk_size] for i in range(0, len(tickers), chunk_size)]
 
-    for idx in range(0, len(tickers), chunk_size):
-        chunk = tickers[idx : idx + chunk_size]
+    def _download_chunk(chunk: List[str]) -> List[Dict[str, Any]]:
+        chunk_rows: List[Dict[str, Any]] = []
         try:
             df = yf.download(
                 tickers=chunk,
@@ -601,7 +605,7 @@ def fetch_screener_data(
                 timeout=25,
             )
             if df is None or df.empty:
-                continue
+                return chunk_rows
             is_multi = isinstance(df.columns, pd.MultiIndex)
             for sym in chunk:
                 sub = df[sym] if (is_multi and sym in df.columns.get_level_values(0)) else (df if not is_multi else None)
@@ -625,7 +629,7 @@ def fetch_screener_data(
                 rsi_val = float(rsi_series.iloc[-1]) if not rsi_series.empty else None
 
                 u = meta_map[sym]
-                rows.append(
+                chunk_rows.append(
                     {
                         "symbol": u["symbol"],
                         "yf_ticker": sym,
@@ -646,9 +650,13 @@ def fetch_screener_data(
                     }
                 )
         except Exception:
-            continue
-        if idx + chunk_size < len(tickers):
-            time.sleep(0.25)
+            pass
+        return chunk_rows
+
+    with ThreadPoolExecutor(max_workers=min(3, len(chunks))) as pool:
+        futs = [pool.submit(_download_chunk, c) for c in chunks]
+        for fut in as_completed(futs):
+            rows.extend(fut.result())
 
     if include_fundamentals and rows:
         def _enrich(row: Dict[str, Any]) -> None:
@@ -660,7 +668,7 @@ def fetch_screener_data(
             row["roe_pct"] = r.get("roe_pct")
             row["div_yield_pct"] = r.get("div_yield_pct")
 
-        with ThreadPoolExecutor(max_workers=6) as pool:
+        with ThreadPoolExecutor(max_workers=10) as pool:
             futs = [pool.submit(_enrich, r) for r in rows]
             for fut in as_completed(futs):
                 try:

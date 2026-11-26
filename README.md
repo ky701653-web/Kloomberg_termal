@@ -4,11 +4,12 @@ A local, open-source, Bloomberg-inspired financial terminal built in **Python 3.
 
 ---
 
-## Implemented Modules (17 Live Panels + Command Bar)
+## Implemented Modules (19 Live Panels + Command Bar)
 
-1. **Home / Market Overview (`HOME`)** — Nifty 50, Sensex, Bank Nifty, India VIX, USD/INR, Gold, WTI & Brent Crude, Global Indices, IST Market Status clock (handles NSE hours & Indian holidays), Nifty 50 Advance/Decline breadth, Top 5 Gainers & Losers, 30s/60s auto-refresh, and CSV exports.
+1. **Home / Market Overview (`HOME`)** — Parallel-loaded Nifty 50, Sensex, Bank Nifty, India VIX, USD/INR, Gold, WTI & Brent Crude, Global Indices, IST Market Status clock (handles NSE hours & Indian holidays), **AI Daily Market Summary** (built-in VADER/NLP brief + optional Gemini/OpenAI enhancement), Nifty 50 Advance/Decline breadth, Top 5 Gainers & Losers, Auto-Refresh (30s/60s), and CSV exports.
 2. **Watchlist (`WL`)** — Persistent NSE/BSE ticker watchlist stored in SQLite (`60s` TTL cache), showing LTP, change, % change, volume, 52-week range progress bar, and 25-day sparklines.
 3. **Charting (`<TICKER> GP`)** — Interactive Plotly candlestick + volume charts, multi-timeframe selector (`5D` to `MAX`), toggles for **SMA 20/50/200**, **EMA 20**, **Bollinger Bands**, **Supertrend (10,3)**, **VWAP**, **RSI (14)**, **MACD (12,26,9)**, multi-ticker comparison, and **Rebased vs Nifty 50 (`^NSEI = 100`)**.
+4. **Backtesting (`<TICKER> BT`)** — Long-only strategy backtester for **Moving-Average Crossover (SMA/EMA)** and **RSI Mean Reversion** with 1-bar lagged execution, transaction costs (bps), equity curve vs Buy & Hold, drawdown chart, CAGR, Sharpe, win rate, and trade log CSV export.
 4. **Fundamentals (`<TICKER> FA`)** — Quarterly & annual income statements, balance sheet, cash flows, valuation & profitability ratios (P/E, P/B, ROE, D/E, Dividend Yield, Market Cap in ₹ Cr / lakh crore), and sector peer comparison.
 5. **Screener (`SCREEN`)** — Scans the local **Nifty 500** universe ([data/nifty500.csv](data/nifty500.csv)) in cached batches of 50 tickers, with filters for Sector, Market Cap, P/E, P/B, ROE, Dividend Yield, RSI, 52W-high proximity, and Volume Spike, plus **3 prebuilt screens** and **custom saved screens**.
 6. **Sector & Nifty Heatmap (`HEATMAP`)** — Interactive Plotly treemaps for Nifty 50 constituents (grouped by sector) and NSE Sectoral Indices.
@@ -22,7 +23,10 @@ A local, open-source, Bloomberg-inspired financial terminal built in **Python 3.
 14. **Portfolio Tracker (`PORT`)** — Manual lot entry + CSV import/export, live valuation in ₹, P&L, **XIRR**, allocation donut chart, **Beta vs Nifty 50**, annualized volatility, Sharpe ratio, max drawdown, and **Indian Capital Gains Tax Estimate** (**STCG 20% u/s 111A** for ≤ 12 months; **LTCG 12.5% u/s 112A** above ₹1.25 lakh annual exemption for > 12 months).
 15. **Crypto & FX (`FX` / `CRYPTO`)** — CoinGecko top cryptocurrencies in INR (with 7D sparklines) and Frankfurter ECB FX cross-rates vs INR + currency converter.
 16. **Alerts (`ALERTS`)** — Price, Daily % Move, RSI, and SMA 20/50 Crossover rules with in-app trigger logs and optional **Telegram Bot** / **SMTP Email** delivery.
-17. **Data Source Status (`STATUS`)** — Live health monitor, IST timestamps, delay disclosures, errors, and one-click SQLite cache reset.
+18. **Broker Feeds (Real-Time) (`BROKER`)** — Live REST quote integration for **Zerodha Kite Connect**, **Upstox v2**, and **Angel One SmartAPI** using `.env` / `st.secrets` credentials, plus full data/legal disclosures.
+19. **Data Source Status (`STATUS`)** — Live health monitor, IST timestamps, delay disclosures, errors, and one-click SQLite cache reset.
+
+> **UI Features:** Toggle between **Dark** (Bloomberg black/orange) and **Light** themes in the sidebar, and press **`/`** or **`Ctrl+K`** anywhere to focus the Command Bar.
 
 ---
 
@@ -105,5 +109,12 @@ Open `http://localhost:8501` in your browser.
 
 ---
 
-## Disclaimer
-For education and research only — **not investment advice**. Free market data (`yfinance`, NSE public feeds, Frankfurter FX, World Bank, CoinGecko, AMFI/mfapi.in) may be delayed, incomplete, or temporarily unavailable. Always verify prices, tax calculations, and corporate filings with official exchange sources before making financial decisions.
+## Data Limitations, Broker APIs & Legal Disclaimer
+
+- **Delay:** `yfinance` and most free feeds are delayed (~15 minutes) or end-of-day. True real-time tick-by-tick data requires a paid or account-linked broker API.
+- **Broker APIs (Optional Future Module):** If you hold an account with **Zerodha (Kite Connect)**, **Upstox**, **Angel One (SmartAPI)**, or **Fyers**, their APIs provide real-time quotes/WebSockets (some free with an account, others paid). See the **Broker Feeds (Real-Time)** panel (`BROKER`) inside the app.
+- **Unofficial Sources:** `yfinance` and NSE public endpoints are unofficial and can change or rate-limit without notice; SQLite fallbacks keep cached snapshots available.
+- **Fundamentals Coverage:** Yahoo Finance fundamentals for Indian stocks can be incomplete or inconsistent — always cross-check key numbers against official **BSE/NSE filings**.
+- **What Is Not Available Free:** Bloomberg's proprietary analytics, IB messaging network, institutional fixed-income/derivatives pricing, and full historical tick data. Free sources cover roughly **70–80%** of what individual investors use.
+- **Legality & Terms:** Respect each provider's Terms of Service and rate limits. Use this app strictly for **personal research** — do not redistribute or resell market data.
+- **Not Investment Advice:** Indicators, screens, tax estimates, and VADER sentiment tags are for education and research only. Always verify before making decisions with real money.

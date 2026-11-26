@@ -14,7 +14,7 @@ from modules.command_bar import normalize_indian_ticker
 from utils.cache import terminal_cache
 from utils.formatting import format_inr, format_pct
 from utils.portfolio_math import compute_portfolio_metrics, compute_xirr, estimate_indian_capital_gains
-from utils.ui import render_csv_download, render_metric_card, render_section_header, style_change_dataframe
+from utils.ui import get_plotly_theme, render_csv_download, render_metric_card, render_section_header, style_change_dataframe
 
 SAMPLE_CSV = (
     "symbol,qty,buy_price,buy_date,notes\n"
@@ -62,17 +62,32 @@ def render_portfolio() -> None:
                 else:
                     imp_df.columns = [c.strip().lower() for c in imp_df.columns]
                     added = 0
+                    skipped = 0
                     for _, row in imp_df.iterrows():
-                        sym = normalize_indian_ticker(str(row["symbol"]))
-                        terminal_cache.add_holding(
-                            sym,
-                            float(row["qty"]),
-                            float(row["buy_price"]),
-                            str(row["buy_date"])[:10],
-                            str(row.get("notes", "") or ""),
-                        )
-                        added += 1
-                    st.success(f"Imported {added} holding lots.")
+                        try:
+                            raw_sym = str(row["symbol"]).strip()
+                            qty_val = float(row["qty"])
+                            price_val = float(row["buy_price"])
+                            date_str = str(row["buy_date"]).strip()[:10]
+                            date.fromisoformat(date_str)
+                            if not raw_sym or raw_sym.lower() == "nan" or qty_val <= 0 or price_val <= 0:
+                                skipped += 1
+                                continue
+                            sym = normalize_indian_ticker(raw_sym)
+                            terminal_cache.add_holding(
+                                sym,
+                                qty_val,
+                                price_val,
+                                date_str,
+                                str(row.get("notes", "") or ""),
+                            )
+                            added += 1
+                        except Exception:
+                            skipped += 1
+                    msg = f"Imported {added} holding lots."
+                    if skipped:
+                        msg += f" Skipped {skipped} invalid row(s)."
+                    st.success(msg)
                     st.rerun()
             except Exception as exc:  # noqa: BLE001
                 st.error(f"CSV import failed: {exc}")
@@ -209,7 +224,14 @@ def render_portfolio() -> None:
         render_section_header("Allocation Breakdown")
         alloc_df = df_lots.groupby("symbol", as_index=False)["current_value"].sum()
         fig_pie = px.pie(alloc_df, names="symbol", values="current_value", hole=0.45)
-        fig_pie.update_layout(template="plotly_dark", paper_bgcolor="#000000", height=340, margin=dict(l=8, r=8, t=12, b=8))
+        ptheme = get_plotly_theme()
+        fig_pie.update_layout(
+            template=ptheme["template"],
+            paper_bgcolor=ptheme["paper_bgcolor"],
+            font=dict(family="Inter, sans-serif", color=ptheme["font_color"]),
+            height=340,
+            margin=dict(l=8, r=8, t=12, b=8),
+        )
         st.plotly_chart(fig_pie, width="stretch")
 
     with col_tax:

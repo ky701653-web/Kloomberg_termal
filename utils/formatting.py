@@ -6,9 +6,9 @@ import math
 from typing import Optional
 
 INR_SYMBOL = "₹"
-COLOR_UP = "#00C805"
-COLOR_DOWN = "#FF3B30"
-COLOR_FLAT = "#A0A4AB"
+COLOR_UP = "#26A69A"
+COLOR_DOWN = "#EF5350"
+COLOR_FLAT = "#8B949E"
 
 
 def is_valid_number(value: object) -> bool:

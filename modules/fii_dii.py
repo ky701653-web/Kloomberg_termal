@@ -8,7 +8,7 @@ import streamlit as st
 
 from data.nse_data import fetch_fii_dii_flows
 from utils.formatting import format_inr
-from utils.ui import render_csv_download, render_metric_card, render_section_header, style_change_dataframe
+from utils.ui import get_plotly_theme, render_csv_download, render_metric_card, render_section_header, style_change_dataframe
 
 
 def render_fii_dii() -> None:
@@ -44,22 +44,26 @@ def render_fii_dii() -> None:
                 subtext=f"Buy ₹{item['buy_value_cr']:,.0f} Cr | Sell ₹{item['sell_value_cr']:,.0f} Cr",
             )
 
+    ptheme = get_plotly_theme()
     fig = go.Figure()
-    for cat, color in [("FII/FPI", "#FF8C00"), ("DII", "#00C805")]:
+    for cat, color in [("FII/FPI", ptheme["accent"]), ("DII", ptheme["up"])]:
         sub = df[df["category"].str.contains(cat.split("/")[0], case=False, na=False)]
         if not sub.empty:
             fig.add_trace(go.Bar(x=sub["date"], y=sub["net_value_cr"], name=cat, marker_color=color))
     if not fig.data:
-        fig.add_trace(go.Bar(x=df["category"] + " " + df["date"], y=df["net_value_cr"], name="Net (₹ Cr)", marker_color="#FF8C00"))
+        fig.add_trace(go.Bar(x=df["category"] + " " + df["date"], y=df["net_value_cr"], name="Net (₹ Cr)", marker_color=ptheme["accent"]))
 
     fig.update_layout(
-        template="plotly_dark",
-        paper_bgcolor="#000000",
-        plot_bgcolor="#0D0F12",
+        template=ptheme["template"],
+        paper_bgcolor=ptheme["paper_bgcolor"],
+        plot_bgcolor=ptheme["plot_bgcolor"],
+        font=dict(family="Inter, sans-serif", color=ptheme["font_color"]),
         barmode="group",
         height=380,
         yaxis_title="Net Flow (₹ Crores)",
     )
+    fig.update_xaxes(showgrid=True, gridcolor=ptheme["gridcolor"], zeroline=False)
+    fig.update_yaxes(showgrid=True, gridcolor=ptheme["gridcolor"], zeroline=False)
     st.plotly_chart(fig, width="stretch")
 
     disp = pd.DataFrame(

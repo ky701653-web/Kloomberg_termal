@@ -2,17 +2,25 @@
 
 from __future__ import annotations
 
+import html
+
 import pandas as pd
 import streamlit as st
 
 from data.macro_news_mf import fetch_news_feed
-from utils.formatting import COLOR_DOWN, COLOR_FLAT, COLOR_UP
-from utils.ui import render_csv_download, render_metric_card, render_section_header
+from utils.ui import (
+    get_theme_palette,
+    render_csv_download,
+    render_metric_card,
+    render_section_header,
+    sanitize_http_url,
+)
 
 
 def render_news() -> None:
     """Render aggregated financial RSS feed with ticker filter and VADER sentiment."""
     render_section_header("Market News Feed & VADER Sentiment (ET • Moneycontrol • Mint • BS • Google News)")
+    pal = get_theme_palette()
 
     default_q = st.session_state.get("active_query") or ""
     c1, c2, c3 = st.columns([3, 1.5, 1])
@@ -61,18 +69,21 @@ def render_news() -> None:
         df = df[df["sentiment"] == sent_filter]
 
     for _, row in df.iterrows():
-        s_label = row["sentiment"]
-        color = COLOR_UP if s_label == "Bullish" else (COLOR_DOWN if s_label == "Bearish" else COLOR_FLAT)
+        s_label = str(row["sentiment"])
+        color = pal["up"] if s_label == "Bullish" else (pal["down"] if s_label == "Bearish" else pal["muted"])
+        safe_src = html.escape(str(row["source"]))
+        safe_pub = html.escape(str(row["published"]))
+        safe_title = html.escape(str(row["title"]))
+        safe_link = sanitize_http_url(str(row["link"]))
         st.markdown(
             f"""
-            <div style="background:#0D0F12; border:1px solid #22262C; border-left:3px solid {color};
-                        padding:8px 12px; border-radius:3px; margin-bottom:6px;">
-                <div style="font-size:0.74rem; color:#9AA0A6;">
-                    <strong style="color:#FF8C00;">{row['source']}</strong> • {row['published']}
-                    <span style="float:right; color:{color}; font-weight:700;">{s_label.upper()} ({row['sentiment_score']:+.2f})</span>
+            <div class="it-feed-card" style="border-left: 3px solid {color};">
+                <div class="it-feed-meta">
+                    <span><strong style="color:{pal['accent']};">{safe_src}</strong> &bull; {safe_pub}</span>
+                    <span class="it-mono" style="color:{color}; font-weight:600;">{s_label.upper()} ({row['sentiment_score']:+.2f})</span>
                 </div>
-                <div style="margin-top:3px; font-size:0.9rem;">
-                    <a href="{row['link']}" target="_blank" style="color:#E8E8E8; text-decoration:none;">{row['title']}</a>
+                <div class="it-feed-title">
+                    <a href="{safe_link}" target="_blank" rel="noopener noreferrer">{safe_title}</a>
                 </div>
             </div>
             """,

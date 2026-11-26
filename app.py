@@ -1,16 +1,19 @@
 """
-IND TERMINAL — India Bloomberg-Style Financial Terminal
+IND TERMINAL — India Financial Research Terminal
 Run locally with: streamlit run app.py
 """
 
 from __future__ import annotations
 
-from typing import Callable, Dict
+from typing import Callable, Dict, List, Tuple
 
 import streamlit as st
 from dotenv import load_dotenv
+from streamlit_option_menu import option_menu
 
 from modules.alerts import render_alerts
+from modules.backtesting import render_backtesting
+from modules.broker_feeds import render_broker_feeds
 from modules.charting import render_charting
 from modules.command_bar import render_command_bar
 from modules.corporate_actions import render_corporate_actions
@@ -28,42 +31,44 @@ from modules.options_fno import render_options_fno
 from modules.portfolio import render_portfolio
 from modules.screener import render_screener
 from modules.watchlist import render_watchlist
-from utils.ui import inject_bloomberg_css, render_disclaimer
+from utils.ui import get_theme_palette, inject_bloomberg_css, render_disclaimer
 
 load_dotenv()
 
 st.set_page_config(
-    page_title="IND TERMINAL // Free Indian Market Terminal",
+    page_title="IND TERMINAL // Indian Market Research Terminal",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-MODULE_GROUPS: Dict[str, list[str]] = {
+MODULE_GROUPS: Dict[str, List[Tuple[str, str]]] = {
     "MARKETS & SCREENING": [
-        "Home / Market Overview",
-        "Watchlist",
-        "Charting",
-        "Fundamentals",
-        "Screener",
-        "Sector & Nifty Heatmap",
+        ("Home / Market Overview", "house"),
+        ("Watchlist", "bookmark-star"),
+        ("Charting", "graph-up-arrow"),
+        ("Backtesting", "arrow-repeat"),
+        ("Fundamentals", "file-earmark-bar-graph"),
+        ("Screener", "funnel"),
+        ("Sector & Nifty Heatmap", "grid-1x2"),
     ],
     "NSE DERIVATIVES & FLOWS": [
-        "F&O / Options",
-        "FII/DII Flows",
+        ("F&O / Options", "layers"),
+        ("FII/DII Flows", "arrow-left-right"),
     ],
     "MACRO, NEWS & FUNDS": [
-        "Macro Dashboard",
-        "News Feed",
-        "Corporate Actions & Filings",
-        "IPO Tracker",
-        "Mutual Funds",
+        ("Macro Dashboard", "globe2"),
+        ("News Feed", "newspaper"),
+        ("Corporate Actions & Filings", "building"),
+        ("IPO Tracker", "rocket-takeoff"),
+        ("Mutual Funds", "piggy-bank"),
     ],
     "PORTFOLIO, FX & SYSTEM": [
-        "Portfolio Tracker",
-        "Crypto & FX (INR)",
-        "Alerts",
-        "Data Source Status",
+        ("Portfolio Tracker", "briefcase"),
+        ("Crypto & FX (INR)", "currency-bitcoin"),
+        ("Alerts", "bell"),
+        ("Broker Feeds (Real-Time)", "plug"),
+        ("Data Source Status", "activity"),
     ],
 }
 
@@ -71,6 +76,7 @@ MODULE_RENDERERS: Dict[str, Callable[[], None]] = {
     "Home / Market Overview": render_home,
     "Watchlist": render_watchlist,
     "Charting": render_charting,
+    "Backtesting": render_backtesting,
     "Fundamentals": render_fundamentals,
     "Screener": render_screener,
     "Sector & Nifty Heatmap": render_heatmap,
@@ -84,54 +90,102 @@ MODULE_RENDERERS: Dict[str, Callable[[], None]] = {
     "Portfolio Tracker": render_portfolio,
     "Crypto & FX (INR)": render_crypto_fx,
     "Alerts": render_alerts,
+    "Broker Feeds (Real-Time)": render_broker_feeds,
     "Data Source Status": render_data_status,
 }
 
 
-def main() -> None:
-    """Render the terminal shell, command bar, sidebar navigation, and active module."""
-    inject_bloomberg_css()
+def _on_menu_select(menu_key: str) -> None:
+    chosen = st.session_state.get(menu_key)
+    if chosen and chosen in MODULE_RENDERERS:
+        st.session_state["active_module"] = chosen
 
+
+def main() -> None:
+    """Render the terminal shell, theme switcher, grouped option_menu sidebar, and active view."""
     if "active_module" not in st.session_state:
         st.session_state["active_module"] = "Home / Market Overview"
+    if "theme_mode" not in st.session_state:
+        st.session_state["theme_mode"] = "dark"
 
-    # Top Title Bar
+    # Sidebar Theme Toggle & Grouped Option Menu
+    with st.sidebar:
+        theme_choice = st.radio(
+            "Appearance",
+            options=["Dark", "Light"],
+            index=0 if st.session_state["theme_mode"] == "dark" else 1,
+            horizontal=True,
+            key="theme_radio",
+        )
+        st.session_state["theme_mode"] = theme_choice.lower()
+        pal = get_theme_palette(st.session_state["theme_mode"])
+
+        st.markdown(
+            f"<div style='color:{pal['text']}; font-weight:700; font-size:1.05rem; "
+            f"letter-spacing:0.02em; margin:8px 0 4px 0;'>"
+            f"<span style='color:{pal['accent']};'>●</span> IND TERMINAL</div>",
+            unsafe_allow_html=True,
+        )
+
+        menu_styles = {
+            "container": {
+                "padding": "4px",
+                "background-color": pal["surface"],
+                "border": f"1px solid {pal['border']}",
+                "border-radius": "12px",
+            },
+            "icon": {"color": pal["muted"], "font-size": "14px"},
+            "nav-link": {
+                "font-family": "Inter, sans-serif",
+                "font-size": "13px",
+                "font-weight": "500",
+                "text-align": "left",
+                "margin": "2px 0",
+                "padding": "7px 10px",
+                "border-radius": "8px",
+                "color": pal["text"],
+                "--hover-color": pal["surface_alt"],
+            },
+            "nav-link-selected": {
+                "background-color": pal["surface_alt"],
+                "color": pal["accent"],
+                "font-weight": "600",
+                "border": f"1px solid {pal['border']}",
+            },
+        }
+
+        active = st.session_state["active_module"]
+        for idx, (group_name, mod_items) in enumerate(MODULE_GROUPS.items()):
+            st.caption(group_name)
+            labels = [m for m, _ in mod_items]
+            icons = [ic for _, ic in mod_items]
+            manual_idx = labels.index(active) if active in labels else -1
+            option_menu(
+                menu_title=None,
+                options=labels,
+                icons=icons,
+                default_index=manual_idx if manual_idx >= 0 else 0,
+                manual_select=manual_idx,
+                styles=menu_styles,
+                key=f"nav_group_{idx}_{st.session_state['theme_mode']}",
+                on_change=_on_menu_select,
+            )
+
+    inject_bloomberg_css(st.session_state["theme_mode"])
+
+    # Clean Top Header Card
     st.markdown(
         """
-        <div style="display:flex; align-items:baseline; justify-content:space-between; margin-bottom:6px;">
-            <span style="color:#FF8C00; font-size:1.35rem; font-weight:800; letter-spacing:0.1em;">
-                IND TERMINAL
-            </span>
-            <span style="color:#8A9099; font-size:0.78rem;">
-                NSE / BSE / INR • Free Open-Source Edition • 17 Live Modules
-            </span>
+        <div class="it-topbar">
+            <div class="it-brand"><span class="it-brand-dot">●</span>IND TERMINAL</div>
+            <div class="it-subtitle">NSE / BSE / INR • Free Open-Source Edition • Press <span class="it-mono">/</span> or <span class="it-mono">Ctrl+K</span></div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    # Persistent Bloomberg-style Command Bar
+    # Persistent Command Bar
     render_command_bar()
-
-    # Sidebar Navigation
-    with st.sidebar:
-        st.markdown(
-            "<div style='color:#FF8C00; font-weight:800; font-size:1rem; letter-spacing:0.08em; margin-bottom:6px;'>"
-            "TERMINAL MODULES</div>",
-            unsafe_allow_html=True,
-        )
-        for group_name, mod_list in MODULE_GROUPS.items():
-            st.caption(group_name)
-            for mod in mod_list:
-                is_active = st.session_state["active_module"] == mod
-                if st.button(
-                    f"▸ {mod}" if is_active else mod,
-                    key=f"nav_{mod}",
-                    width="stretch",
-                    type="primary" if is_active else "secondary",
-                ):
-                    st.session_state["active_module"] = mod
-                    st.rerun()
 
     # Route Active Module
     active = st.session_state["active_module"]

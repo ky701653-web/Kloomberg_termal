@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
+import html
+
 import pandas as pd
 import streamlit as st
 
 from data.nse_data import fetch_ipo_data
-from utils.ui import render_csv_download, render_section_header
+from utils.ui import get_theme_palette, render_csv_download, render_section_header, sanitize_http_url
 
 
 def render_ipo() -> None:
     """Render Current, Upcoming, and IPO News tracker."""
     render_section_header("Indian IPO Tracker (NSE Mainboard & SME)")
+    pal = get_theme_palette()
 
     if st.button("Refresh IPO Feed", key="ipo_refresh"):
         st.rerun()
@@ -48,13 +51,15 @@ def render_ipo() -> None:
         news = bundle.get("news", [])
         if news:
             for item in news:
+                safe_pub = html.escape(str(item["published"]))
+                safe_title = html.escape(str(item["title"]))
+                safe_link = sanitize_http_url(str(item["link"]))
                 st.markdown(
                     f"""
-                    <div style="background:#0D0F12; border:1px solid #22262C; border-left:3px solid #FF8C00;
-                                padding:8px 12px; border-radius:3px; margin-bottom:6px;">
-                        <div style="font-size:0.74rem; color:#9AA0A6;">{item['published']}</div>
-                        <div style="margin-top:2px; font-size:0.88rem;">
-                            <a href="{item['link']}" target="_blank" style="color:#E8E8E8; text-decoration:none;">{item['title']}</a>
+                    <div class="it-feed-card" style="border-left: 3px solid {pal['accent']};">
+                        <div class="it-feed-meta"><span>{safe_pub}</span></div>
+                        <div class="it-feed-title">
+                            <a href="{safe_link}" target="_blank" rel="noopener noreferrer">{safe_title}</a>
                         </div>
                     </div>
                     """,

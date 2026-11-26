@@ -9,7 +9,7 @@ import streamlit as st
 from data.market_data import fetch_yfinance_quotes
 from data.nse_data import fetch_option_chain
 from utils.formatting import format_indian_commas, format_number
-from utils.ui import render_csv_download, render_metric_card, render_section_header
+from utils.ui import get_plotly_theme, render_csv_download, render_metric_card, render_section_header
 
 
 def render_options_fno() -> None:
@@ -87,22 +87,26 @@ def render_options_fno() -> None:
     tab_oi, tab_chain, tab_mp = st.tabs(["Open Interest Chart", "Option Chain Table", "Max Pain Curve"])
 
     with tab_oi:
+        ptheme = get_plotly_theme()
         fig_oi = go.Figure()
-        fig_oi.add_trace(go.Bar(x=df_view["strike"], y=df_view["ce_oi"], name="Call OI", marker_color="#FF3B30"))
-        fig_oi.add_trace(go.Bar(x=df_view["strike"], y=df_view["pe_oi"], name="Put OI", marker_color="#00C805"))
+        fig_oi.add_trace(go.Bar(x=df_view["strike"], y=df_view["ce_oi"], name="Call OI", marker_color=ptheme["down"]))
+        fig_oi.add_trace(go.Bar(x=df_view["strike"], y=df_view["pe_oi"], name="Put OI", marker_color=ptheme["up"]))
         if spot:
-            fig_oi.add_vline(x=float(spot), line_dash="dash", line_color="#FF8C00", annotation_text=f"Spot {spot}")
+            fig_oi.add_vline(x=float(spot), line_dash="dash", line_color=ptheme["accent"], annotation_text=f"Spot {spot}")
         if max_pain:
             fig_oi.add_vline(x=float(max_pain), line_dash="dot", line_color="#38BDF8", annotation_text=f"Max Pain {max_pain:.0f}")
         fig_oi.update_layout(
             barmode="group",
-            template="plotly_dark",
-            paper_bgcolor="#000000",
-            plot_bgcolor="#0D0F12",
+            template=ptheme["template"],
+            paper_bgcolor=ptheme["paper_bgcolor"],
+            plot_bgcolor=ptheme["plot_bgcolor"],
+            font=dict(family="Inter, sans-serif", color=ptheme["font_color"]),
             height=420,
             xaxis_title="Strike Price",
             yaxis_title="Open Interest",
         )
+        fig_oi.update_xaxes(showgrid=True, gridcolor=ptheme["gridcolor"], zeroline=False)
+        fig_oi.update_yaxes(showgrid=True, gridcolor=ptheme["gridcolor"], zeroline=False)
         st.plotly_chart(fig_oi, width="stretch")
 
     with tab_chain:
@@ -125,6 +129,7 @@ def render_options_fno() -> None:
     with tab_mp:
         mp_curve = bundle.get("max_pain_curve", [])
         if mp_curve:
+            ptheme = get_plotly_theme()
             mp_df = pd.DataFrame(mp_curve)
             fig_mp = go.Figure()
             fig_mp.add_trace(
@@ -133,19 +138,22 @@ def render_options_fno() -> None:
                     y=mp_df["total_payout"],
                     mode="lines+markers",
                     name="Option Buyer Payout",
-                    line=dict(color="#FF8C00", width=2),
+                    line=dict(color=ptheme["accent"], width=2),
                 )
             )
             if max_pain:
-                fig_mp.add_vline(x=float(max_pain), line_dash="dash", line_color="#00C805", annotation_text=f"Max Pain: {max_pain:.0f}")
+                fig_mp.add_vline(x=float(max_pain), line_dash="dash", line_color=ptheme["up"], annotation_text=f"Max Pain: {max_pain:.0f}")
             fig_mp.update_layout(
-                template="plotly_dark",
-                paper_bgcolor="#000000",
-                plot_bgcolor="#0D0F12",
+                template=ptheme["template"],
+                paper_bgcolor=ptheme["paper_bgcolor"],
+                plot_bgcolor=ptheme["plot_bgcolor"],
+                font=dict(family="Inter, sans-serif", color=ptheme["font_color"]),
                 height=380,
                 xaxis_title="Expiry Settlement Strike",
                 yaxis_title="Total Intrinsic Payout",
             )
+            fig_mp.update_xaxes(showgrid=True, gridcolor=ptheme["gridcolor"], zeroline=False)
+            fig_mp.update_yaxes(showgrid=True, gridcolor=ptheme["gridcolor"], zeroline=False)
             st.plotly_chart(fig_mp, width="stretch")
         else:
             st.info("Max pain curve unavailable.")

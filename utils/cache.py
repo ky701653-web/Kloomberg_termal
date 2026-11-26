@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -30,26 +31,29 @@ class TerminalCache:
     def __init__(self, db_path: Optional[Path] = None) -> None:
         self.db_path = Path(db_path) if db_path else DEFAULT_DB_PATH
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        self._lock = threading.RLock()
         self._init_schema()
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path, timeout=10.0)
+        conn = sqlite3.connect(self.db_path, timeout=15.0, check_same_thread=False)
         conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute("PRAGMA busy_timeout=5000;")
         return conn
 
     @contextmanager
     def _connection(self) -> Iterator[sqlite3.Connection]:
-        """Yield a SQLite connection, commit/rollback its transaction, and close it."""
-        conn = self._connect()
-        try:
-            with conn:
-                yield conn
-        finally:
-            conn.close()
+        """Yield a thread-safe SQLite connection, commit/rollback, and close it."""
+        with self._lock:
+            conn = self._connect()
+            try:
+                with conn:
+                    yield conn
+            finally:
+                conn.close()
 
     def _init_schema(self) -> None:
         with self._connection() as conn:
+            conn.execute("PRAGMA journal_mode=WAL;")
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS kv_cache (

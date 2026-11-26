@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import quote_plus
@@ -83,9 +84,10 @@ def fetch_news_feed(
     articles: List[Dict[str, Any]] = []
     errors: List[str] = []
 
-    for source_name, url in feeds:
+    def _fetch_single_feed(source_name: str, url: str) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+        local_items: List[Dict[str, Any]] = []
         try:
-            resp = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=10)
+            resp = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=8)
             resp.raise_for_status()
             parsed = feedparser.parse(resp.content)
             for entry in parsed.entries[:20]:
@@ -101,7 +103,7 @@ def fetch_news_feed(
                     if q_base not in haystack:
                         continue
                 compound, label = _score_sentiment(f"{title}. {summary[:200]}")
-                articles.append(
+                local_items.append(
                     {
                         "source": source_name,
                         "title": title,
@@ -111,8 +113,17 @@ def fetch_news_feed(
                         "sentiment": label,
                     }
                 )
+            return local_items, None
         except Exception as exc:  # noqa: BLE001
-            errors.append(f"{source_name}: {exc}")
+            return [], f"{source_name}: {exc}"
+
+    with ThreadPoolExecutor(max_workers=len(feeds)) as pool:
+        futs = [pool.submit(_fetch_single_feed, src, u) for src, u in feeds]
+        for fut in as_completed(futs):
+            items, err = fut.result()
+            articles.extend(items)
+            if err:
+                errors.append(err)
 
     # Deduplicate by title
     seen = set()

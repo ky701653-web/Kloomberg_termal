@@ -124,6 +124,7 @@ class TestModulesAndPersistence(unittest.TestCase):
             ("PORT", "Portfolio Tracker"),
             ("CRYPTO", "Crypto & FX (INR)"),
             ("ALERTS", "Alerts"),
+            ("BROKER", "Broker Feeds (Real-Time)"),
             ("STATUS", "Data Source Status"),
         ]
         for raw, expected_mod in cases:

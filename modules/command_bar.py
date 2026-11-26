@@ -1,4 +1,4 @@
-"""Module 17: Bloomberg-style Command Bar parser and UI component."""
+"""Module 17: Bloomberg-style Command Bar parser, keyboard shortcut (/ or Ctrl+K), and UI component."""
 
 from __future__ import annotations
 
@@ -19,6 +19,7 @@ COMMAND_HELP: List[Dict[str, str]] = [
     {"Command": "WL", "Action": "Open NSE/BSE Watchlist"},
     {"Command": "INFY GP", "Action": "Open Interactive Charting for INFY.NS"},
     {"Command": "TCS FA", "Action": "Open Fundamentals & Financial Statements for TCS.NS"},
+    {"Command": "RELIANCE BT", "Action": "Open Strategy Backtester for RELIANCE.NS"},
     {"Command": "SCREEN", "Action": "Open Nifty 500 Stock Screener"},
     {"Command": "HEATMAP", "Action": "Open Sector & Nifty 50 Treemap Heatmaps"},
     {"Command": "NIFTY OPT", "Action": "Open NSE Option Chain, PCR & Max Pain"},
@@ -31,6 +32,7 @@ COMMAND_HELP: List[Dict[str, str]] = [
     {"Command": "PORT", "Action": "Open Portfolio Tracker (XIRR, Risk, Capital Gains)"},
     {"Command": "FX / CRYPTO", "Action": "Open Crypto & Global FX (INR) Panels"},
     {"Command": "ALERTS", "Action": "Open Alerts Engine (Price, RSI, MA Cross)"},
+    {"Command": "BROKER", "Action": "Open Real-Time Broker APIs (Zerodha, Upstox, Angel One)"},
     {"Command": "HOME", "Action": "Return to Home / Market Overview"},
     {"Command": "STATUS", "Action": "Open Data Source Status & Cache Diagnostics"},
     {"Command": "HELP", "Action": "Toggle this command reference table"},
@@ -77,6 +79,8 @@ def parse_command(raw_input: str) -> ParsedCommand:
         "GP": "Charting",
         "CHART": "Charting",
         "FA": "Fundamentals",
+        "BT": "Backtesting",
+        "BACKTEST": "Backtesting",
         "SCREEN": "Screener",
         "SCREENER": "Screener",
         "HEATMAP": "Sector & Nifty Heatmap",
@@ -97,6 +101,8 @@ def parse_command(raw_input: str) -> ParsedCommand:
         "CRYPTO": "Crypto & FX (INR)",
         "ALERTS": "Alerts",
         "ALERT": "Alerts",
+        "BROKER": "Broker Feeds (Real-Time)",
+        "BROKERS": "Broker Feeds (Real-Time)",
         "STATUS": "Data Source Status",
     }
 
@@ -122,6 +128,8 @@ def parse_command(raw_input: str) -> ParsedCommand:
             "GP": "Charting",
             "CHART": "Charting",
             "FA": "Fundamentals",
+            "BT": "Backtesting",
+            "BACKTEST": "Backtesting",
             "OPT": "F&O / Options",
             "FNO": "F&O / Options",
             "NEWS": "News Feed",
@@ -141,7 +149,7 @@ def parse_command(raw_input: str) -> ParsedCommand:
             ticker,
             first,
             False,
-            f"Active security set to {ticker} (try '{first} GP', '{first} FA', or '{first} CORP')",
+            f"Active security set to {ticker} (try '{first} GP', '{first} FA', or '{first} BT')",
             True,
         )
 
@@ -156,14 +164,14 @@ def parse_command(raw_input: str) -> ParsedCommand:
 
 
 def render_command_bar() -> None:
-    """Render the persistent Bloomberg-style command bar and handle routing."""
+    """Render the persistent Bloomberg-style command bar with '/' or Ctrl+K focus shortcut."""
     import streamlit as st
 
     col_input, col_btn, col_help = st.columns([6, 1, 1])
     with col_input:
         raw_cmd = st.text_input(
             label="Command Bar",
-            placeholder="Type command: RELIANCE GO | INFY GP | TCS FA | SCREEN | HEATMAP | NIFTY OPT | NEWS HDFCBANK | MF | PORT | HELP",
+            placeholder="Press / or Ctrl+K — RELIANCE GO | INFY GP | TCS FA | RELIANCE BT | SCREEN | BROKER | HELP",
             label_visibility="collapsed",
             key="bb_command_input",
         )
@@ -171,6 +179,37 @@ def render_command_bar() -> None:
         run_clicked = st.button("GO", width="stretch", type="primary")
     with col_help:
         help_clicked = st.button("HELP", width="stretch")
+
+    # Bind '/' (when outside inputs) and 'Ctrl+K' / 'Cmd+K' to focus the Command Bar
+    shortcut_html = """
+        <script>
+        (function() {
+            const doc = window.parent.document;
+            if (doc.__indTerminalShortcutBound) return;
+            doc.__indTerminalShortcutBound = true;
+            doc.addEventListener('keydown', function(e) {
+                const tag = (doc.activeElement && doc.activeElement.tagName || '').toLowerCase();
+                const isInput = tag === 'input' || tag === 'textarea' || (doc.activeElement && doc.activeElement.isContentEditable);
+                const isShortcut = (e.key === '/' && !isInput && !e.ctrlKey && !e.metaKey && !e.altKey) ||
+                                   ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k');
+                if (isShortcut) {
+                    const el = doc.querySelector('input[aria-label="Command Bar"]');
+                    if (el) {
+                        e.preventDefault();
+                        el.focus();
+                        el.select();
+                    }
+                }
+            });
+        })();
+        </script>
+    """
+    if hasattr(st, "iframe"):
+        st.iframe(shortcut_html, height=1)
+    else:
+        import streamlit.components.v1 as components
+
+        components.html(shortcut_html, height=0)
 
     if help_clicked:
         st.session_state["show_cmd_help"] = not st.session_state.get("show_cmd_help", False)

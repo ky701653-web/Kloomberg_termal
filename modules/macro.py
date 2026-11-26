@@ -9,7 +9,7 @@ import streamlit as st
 from data.macro_news_mf import fetch_macro_dashboard
 from data.market_data import fetch_yfinance_quotes
 from utils.formatting import format_number
-from utils.ui import render_csv_download, render_metric_card, render_section_header
+from utils.ui import get_plotly_theme, render_csv_download, render_metric_card, render_section_header
 
 
 def render_macro() -> None:
@@ -71,21 +71,25 @@ def render_macro() -> None:
             key="macro_wb_sel",
         )
         pts = wb[sel_wb]["history"]
+        ptheme = get_plotly_theme()
         fig_wb = go.Figure()
         fig_wb.add_trace(
             go.Bar(
                 x=[p["date"] for p in pts],
                 y=[p["value"] for p in pts],
-                marker_color="#FF8C00",
+                marker_color=ptheme["accent"],
                 name=wb[sel_wb]["label"],
             )
         )
         fig_wb.update_layout(
-            template="plotly_dark",
-            paper_bgcolor="#000000",
-            plot_bgcolor="#0D0F12",
+            template=ptheme["template"],
+            paper_bgcolor=ptheme["paper_bgcolor"],
+            plot_bgcolor=ptheme["plot_bgcolor"],
+            font=dict(family="Inter, sans-serif", color=ptheme["font_color"]),
             height=320,
         )
+        fig_wb.update_xaxes(showgrid=True, gridcolor=ptheme["gridcolor"], zeroline=False)
+        fig_wb.update_yaxes(showgrid=True, gridcolor=ptheme["gridcolor"], zeroline=False)
         st.plotly_chart(fig_wb, width="stretch")
 
     # FRED Series (when FRED_API_KEY is configured)
@@ -106,16 +110,25 @@ def render_macro() -> None:
             key="macro_fred_sel",
         )
         f_pts = fred_series[sel_fred]["history"]
+        ptheme_f = get_plotly_theme()
         fig_f = go.Figure()
         fig_f.add_trace(
             go.Scatter(
                 x=[p["date"] for p in f_pts],
                 y=[p["value"] for p in f_pts],
                 mode="lines+markers",
-                line=dict(color="#00C805", width=2),
+                line=dict(color=ptheme_f["up"], width=2),
             )
         )
-        fig_f.update_layout(template="plotly_dark", paper_bgcolor="#000000", plot_bgcolor="#0D0F12", height=320)
+        fig_f.update_layout(
+            template=ptheme_f["template"],
+            paper_bgcolor=ptheme_f["paper_bgcolor"],
+            plot_bgcolor=ptheme_f["plot_bgcolor"],
+            font=dict(family="Inter, sans-serif", color=ptheme_f["font_color"]),
+            height=320,
+        )
+        fig_f.update_xaxes(showgrid=True, gridcolor=ptheme_f["gridcolor"], zeroline=False)
+        fig_f.update_yaxes(showgrid=True, gridcolor=ptheme_f["gridcolor"], zeroline=False)
         st.plotly_chart(fig_f, width="stretch")
 
     # RBI & MOSPI Reference

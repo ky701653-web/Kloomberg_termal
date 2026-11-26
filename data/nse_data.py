@@ -35,17 +35,25 @@ NSE_HEADERS = {
 }
 
 
-def _nse_get_json(url: str, timeout: int = 10) -> Any:
-    """Perform polite NSE session cookie handshake and fetch JSON."""
-    session = requests.Session()
-    session.headers.update(NSE_HEADERS)
-    session.get(NSE_BASE_URL, timeout=8)
-    time.sleep(0.4)
-    resp = session.get(url, timeout=timeout)
-    if resp.status_code in (401, 403, 429):
-        raise RuntimeError(f"HTTP {resp.status_code} (NSE anti-bot / rate limit)")
-    resp.raise_for_status()
-    return resp.json()
+_NSE_COOLDOWN_UNTIL: float = 0.0
+
+
+def _nse_get_json(url: str, timeout: int = 8) -> Any:
+    """Perform polite NSE session cookie handshake and fetch JSON with cooldown guard."""
+    global _NSE_COOLDOWN_UNTIL
+    if time.time() < _NSE_COOLDOWN_UNTIL:
+        raise RuntimeError("NSE cooldown active after recent block")
+
+    with requests.Session() as session:
+        session.headers.update(NSE_HEADERS)
+        session.get(NSE_BASE_URL, timeout=6)
+        time.sleep(0.25)
+        resp = session.get(url, timeout=timeout)
+        if resp.status_code in (401, 403, 429):
+            _NSE_COOLDOWN_UNTIL = time.time() + 180.0
+            raise RuntimeError(f"HTTP {resp.status_code} (NSE anti-bot / rate limit)")
+        resp.raise_for_status()
+        return resp.json()
 
 
 def _log_nse_status(status: str, success: bool, error_msg: str = "") -> None:
@@ -68,18 +76,16 @@ def fetch_nse_nifty50_breadth_and_movers(
         return cached.data, False, cached.fetched_at_ist
 
     last_error = ""
-    for attempt in range(2):
-        try:
-            payload = _nse_get_json(NSE_NIFTY50_URL)
-            raw_items: List[Dict[str, Any]] = payload.get("data", [])
-            constituents = [
-                row for row in raw_items
-                if row.get("symbol") and row.get("symbol") != "NIFTY 50"
-            ]
-            if not constituents:
-                last_error = "NSE returned empty constituent list."
-                break
-
+    try:
+        payload = _nse_get_json(NSE_NIFTY50_URL)
+        raw_items: List[Dict[str, Any]] = payload.get("data", [])
+        constituents = [
+            row for row in raw_items
+            if row.get("symbol") and row.get("symbol") != "NIFTY 50"
+        ]
+        if not constituents:
+            last_error = "NSE returned empty constituent list."
+        else:
             parsed: List[Dict[str, Any]] = []
             for row in constituents:
                 try:
@@ -117,9 +123,8 @@ def fetch_nse_nifty50_breadth_and_movers(
             ts_ist = terminal_cache.set(cache_key, result, ttl_seconds=ttl_seconds)
             _log_nse_status("OK", True)
             return result, False, ts_ist
-        except Exception as exc:  # noqa: BLE001
-            last_error = str(exc)
-            time.sleep(0.8 * (attempt + 1))
+    except Exception as exc:  # noqa: BLE001
+        last_error = str(exc)
 
     status_label = (
         "RATE LIMITED / BLOCKED"

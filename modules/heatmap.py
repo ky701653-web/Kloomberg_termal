@@ -8,7 +8,7 @@ import streamlit as st
 
 from data.market_data import SECTOR_INDICES, fetch_nifty50_heatmap_data, fetch_yfinance_quotes
 from utils.formatting import format_number, format_pct
-from utils.ui import render_csv_download, render_section_header, style_change_dataframe
+from utils.ui import get_plotly_theme, get_theme_palette, render_csv_download, render_section_header, style_change_dataframe
 
 
 def render_heatmap() -> None:
@@ -26,6 +26,8 @@ def render_heatmap() -> None:
             st.caption(f"Sized by traded turnover proxy; colored by daily % change | Updated: {ts_ist}")
 
         if rows:
+            pal = get_theme_palette()
+            ptheme = get_plotly_theme()
             df = pd.DataFrame(rows)
             df["label"] = df.apply(
                 lambda r: f"{r['name']}<br>{format_pct(r['pct_change'])}", axis=1
@@ -35,15 +37,16 @@ def render_heatmap() -> None:
                 path=[px.Constant("Nifty 50"), "sector", "name"],
                 values="weight_proxy",
                 color="pct_change",
-                color_continuous_scale=["#FF3B30", "#1E2228", "#00C805"],
+                color_continuous_scale=[pal["down"], pal["surface_alt"], pal["up"]],
                 color_continuous_midpoint=0.0,
                 range_color=[-4.0, 4.0],
                 hover_data={"price": True, "pct_change": ":.2f", "weight_proxy": False},
             )
             fig.update_traces(texttemplate="%{label}<br>%{customdata[1]:+.2f}%", textposition="middle center")
             fig.update_layout(
-                template="plotly_dark",
-                paper_bgcolor="#000000",
+                template=ptheme["template"],
+                paper_bgcolor=ptheme["paper_bgcolor"],
+                font=dict(family="Inter, sans-serif", color=ptheme["font_color"]),
                 height=580,
                 margin=dict(l=8, r=8, t=24, b=8),
             )
@@ -64,6 +67,8 @@ def render_heatmap() -> None:
         if sec_stale:
             st.warning(f"Showing cached sector indices from {sec_ts}.")
         if sec_rows:
+            pal = get_theme_palette()
+            ptheme = get_plotly_theme()
             sdf = pd.DataFrame(sec_rows).sort_values("pct_change", ascending=False)
             sdf["pct_abs"] = sdf["pct_change"].abs().clip(lower=0.25)
             fig_s = px.treemap(
@@ -71,15 +76,16 @@ def render_heatmap() -> None:
                 path=[px.Constant("NSE Sectors"), "name"],
                 values="pct_abs",
                 color="pct_change",
-                color_continuous_scale=["#FF3B30", "#1E2228", "#00C805"],
+                color_continuous_scale=[pal["down"], pal["surface_alt"], pal["up"]],
                 color_continuous_midpoint=0.0,
                 range_color=[-3.5, 3.5],
                 hover_data={"price": True, "pct_change": ":.2f", "pct_abs": False},
             )
             fig_s.update_traces(texttemplate="%{label}<br>%{customdata[1]:+.2f}%", textposition="middle center")
             fig_s.update_layout(
-                template="plotly_dark",
-                paper_bgcolor="#000000",
+                template=ptheme["template"],
+                paper_bgcolor=ptheme["paper_bgcolor"],
+                font=dict(family="Inter, sans-serif", color=ptheme["font_color"]),
                 height=420,
                 margin=dict(l=8, r=8, t=20, b=8),
             )

@@ -8,7 +8,7 @@ import streamlit as st
 
 from data.macro_news_mf import fetch_mf_nav_history, search_mutual_funds
 from utils.formatting import format_inr, format_pct
-from utils.ui import render_csv_download, render_metric_card, render_section_header
+from utils.ui import get_plotly_theme, render_csv_download, render_metric_card, render_section_header
 
 
 def compute_sip_projection(monthly_sip: float, years: int, annual_return_pct: float) -> dict:
@@ -82,6 +82,7 @@ def render_mutual_funds() -> None:
                 render_metric_card("5Y CAGR", format_pct(cagr.get("5Y")) if "5Y" in cagr else "N/A")
 
             if hist:
+                ptheme = get_plotly_theme()
                 df_nav = pd.DataFrame(hist)
                 fig = go.Figure()
                 fig.add_trace(
@@ -90,16 +91,19 @@ def render_mutual_funds() -> None:
                         y=df_nav["nav"],
                         mode="lines",
                         name="NAV (₹)",
-                        line=dict(color="#FF8C00", width=2),
+                        line=dict(color=ptheme["accent"], width=2),
                     )
                 )
                 fig.update_layout(
-                    template="plotly_dark",
-                    paper_bgcolor="#000000",
-                    plot_bgcolor="#0D0F12",
+                    template=ptheme["template"],
+                    paper_bgcolor=ptheme["paper_bgcolor"],
+                    plot_bgcolor=ptheme["plot_bgcolor"],
+                    font=dict(family="Inter, sans-serif", color=ptheme["font_color"]),
                     height=360,
                     yaxis_title="NAV (₹)",
                 )
+                fig.update_xaxes(showgrid=True, gridcolor=ptheme["gridcolor"], zeroline=False)
+                fig.update_yaxes(showgrid=True, gridcolor=ptheme["gridcolor"], zeroline=False)
                 st.plotly_chart(fig, width="stretch")
                 render_csv_download(df_nav, f"mf_{sel_scheme['schemeCode']}_nav.csv", label="Download NAV History CSV")
 

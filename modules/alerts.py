@@ -56,7 +56,7 @@ def _send_email(subject: str, body: str) -> Tuple[bool, str]:
         return False, "SMTP email keys not configured"
     try:
         msg = EmailMessage()
-        msg["Subject"] = subject
+        msg["Subject"] = subject.replace("\r", " ").replace("\n", " ").strip()
         msg["From"] = user
         msg["To"] = to_addr
         msg.set_content(body)

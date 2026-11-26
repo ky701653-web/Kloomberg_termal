@@ -1,12 +1,15 @@
-"""Module 1: Home / Market Overview (Indian & Global Benchmarks, Breadth, Movers)."""
+"""Module 1: Home / Market Overview with Parallel Loading & AI Daily Market Summary."""
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+import html
+from concurrent.futures import ThreadPoolExecutor
+from typing import Any, Dict, List, Tuple
 
 import pandas as pd
 import streamlit as st
 
+from data.macro_news_mf import fetch_news_feed
 from data.market_data import (
     GLOBAL_INDICES,
     INDIAN_INDICES,
@@ -15,16 +18,11 @@ from data.market_data import (
     fetch_yfinance_quotes,
 )
 from data.nse_data import fetch_nse_nifty50_breadth_and_movers
-from utils.formatting import (
-    COLOR_DOWN,
-    COLOR_FLAT,
-    COLOR_UP,
-    format_inr,
-    format_number,
-    format_pct,
-)
+from utils.formatting import format_inr, format_number, format_pct
 from utils.market_hours import get_market_status
+from utils.market_summary import generate_ai_market_summary
 from utils.ui import (
+    get_theme_palette,
     render_csv_download,
     render_metric_card,
     render_section_header,
@@ -32,34 +30,40 @@ from utils.ui import (
 )
 
 
-@st.cache_data(ttl=60, show_spinner=False)
-def _load_indian_indices() -> tuple[List[Dict[str, Any]], bool, str]:
-    return fetch_yfinance_quotes(INDIAN_INDICES, cache_key="home_indian_indices", ttl_seconds=60)
-
-
-@st.cache_data(ttl=60, show_spinner=False)
-def _load_macro_commodities() -> tuple[List[Dict[str, Any]], bool, str]:
+def _fetch_macro_bundle() -> Tuple[List[Dict[str, Any]], bool, str]:
     items = [(name, sym) for name, sym, _ in MACRO_COMMODITIES]
     rows, is_stale, ts_ist = fetch_yfinance_quotes(
         items, cache_key="home_macro_commodities", ttl_seconds=60
     )
-    # If USD/INR failed from yfinance, fall back to Frankfurter ECB reference rate
-    has_fx = any(r["symbol"] == "INR=X" for r in rows)
-    if not has_fx:
+    if not any(r["symbol"] == "INR=X" for r in rows):
         fx_fallback = fetch_usd_inr_frankfurter()
         if fx_fallback:
-            rows.insert(0, fx_fallback)
+            rows = [fx_fallback] + list(rows)
     return rows, is_stale, ts_ist
 
 
-@st.cache_data(ttl=60, show_spinner=False)
-def _load_global_indices() -> tuple[List[Dict[str, Any]], bool, str]:
-    return fetch_yfinance_quotes(GLOBAL_INDICES, cache_key="home_global_indices", ttl_seconds=60)
+def _load_home_parallel() -> Dict[str, Any]:
+    """Fetch all Home panels concurrently to minimize cold-load latency."""
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        f_ind = pool.submit(fetch_yfinance_quotes, INDIAN_INDICES, "home_indian_indices", 60)
+        f_mac = pool.submit(_fetch_macro_bundle)
+        f_glob = pool.submit(fetch_yfinance_quotes, GLOBAL_INDICES, "home_global_indices", 60)
+        f_brd = pool.submit(fetch_nse_nifty50_breadth_and_movers, 60)
+        f_news = pool.submit(fetch_news_feed, None, 600)
 
+        ind_res = f_ind.result()
+        mac_res = f_mac.result()
+        glob_res = f_glob.result()
+        brd_res = f_brd.result()
+        news_res = f_news.result()
 
-@st.cache_data(ttl=180, show_spinner=False)
-def _load_breadth_and_movers() -> tuple[Dict[str, Any], bool, str]:
-    return fetch_nse_nifty50_breadth_and_movers(ttl_seconds=180)
+    return {
+        "indian": ind_res,
+        "macro": mac_res,
+        "global": glob_res,
+        "breadth": brd_res,
+        "news": news_res,
+    }
 
 
 def _render_movers_table(rows: List[Dict[str, Any]], csv_name: str) -> None:
@@ -80,7 +84,7 @@ def _render_movers_table(rows: List[Dict[str, Any]], csv_name: str) -> None:
         ]
     )
     st.dataframe(
-        style_change_dataframe(df, ["Chg", "% Chg"]),
+        style_change_dataframe(df, ["Chg", "% Chg"], ["LTP (₹)", "Chg", "% Chg", "High", "Low"]),
         width="stretch",
         hide_index=True,
     )
@@ -89,12 +93,14 @@ def _render_movers_table(rows: List[Dict[str, Any]], csv_name: str) -> None:
 
 def _render_dashboard_body() -> None:
     """Render all live overview panels (called inside optional auto-refresh fragment)."""
+    pal = get_theme_palette()
+
     # 1. Market Status Banner (IST)
     status = get_market_status()
     pill_class = (
-        "bb-pill-open"
+        "it-pill-open"
         if status.state == "OPEN"
-        else ("bb-pill-pre" if status.state == "PRE-OPEN" else "bb-pill-closed")
+        else ("it-pill-pre" if status.state == "PRE-OPEN" else "it-pill-closed")
     )
     next_open_str = (
         f" | Next open: {status.next_open_ist.strftime('%a %d %b, %I:%M %p IST')}"
@@ -103,27 +109,46 @@ def _render_dashboard_body() -> None:
     )
     st.markdown(
         f"""
-        <div style="display:flex; flex-wrap:wrap; align-items:center; gap:10px;
-                    background:#0D0F12; border:1px solid #22262C; padding:8px 12px;
-                    border-radius:3px; margin-bottom:10px; font-size:0.82rem;">
-            <span class="{pill_class}">NSE {status.state}</span>
-            <span>{status.reason}</span>
-            <span style="color:#FF8C00; margin-left:auto;">{status.timestamp_str}{next_open_str}</span>
+        <div class="it-status-bar">
+            <span class="{pill_class}">NSE {html.escape(status.state)}</span>
+            <span>{html.escape(status.reason)}</span>
+            <span class="it-mono" style="color:{pal['muted']}; margin-left:auto;">{html.escape(status.timestamp_str + next_open_str)}</span>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    # Active security quick banner if user ran "<TICKER> GO"
     active_ticker = st.session_state.get("active_ticker")
     if active_ticker:
-        st.caption(f"Active security from Command Bar: **{active_ticker}** (type `{active_ticker.replace('.NS', '')} GP` for Charting in Stage 2 or `FA` for Fundamentals in Stage 3)")
+        st.caption(
+            f"Active security from Command Bar: **{active_ticker}** "
+            f"(try `{active_ticker.replace('.NS', '')} GP`, `FA`, or `BT`)"
+        )
+
+    with st.spinner("Loading Indian benchmarks, macro, breadth, and market brief..."):
+        bundle = _load_home_parallel()
+
+    ind_rows, ind_stale, ind_ts = bundle["indian"]
+    macro_rows, macro_stale, macro_ts = bundle["macro"]
+    glob_rows, glob_stale, glob_ts = bundle["global"]
+    breadth, breadth_stale, breadth_ts = bundle["breadth"]
+    headlines, _, _ = bundle["news"]
+
+    # AI / NLP Daily Market Summary
+    render_section_header("AI Daily Market Summary")
+    summary_md, summary_engine, summary_ts = generate_ai_market_summary(
+        indices=ind_rows,
+        macro=macro_rows,
+        breadth=breadth,
+        headlines=headlines,
+        ttl_seconds=300,
+    )
+    with st.container(border=True):
+        st.markdown(summary_md)
+        st.caption(f"Engine: **{summary_engine}** | Updated: {summary_ts}")
 
     # 2. Indian Benchmark Indices
     render_section_header("Indian Benchmark Indices (NSE / BSE — ~15 min delayed via yfinance)")
-    with st.spinner("Loading Indian benchmarks..."):
-        ind_rows, ind_stale, ind_ts = _load_indian_indices()
-
     if ind_stale:
         st.warning(f"Showing last cached Indian index quotes from {ind_ts} (live fetch failed).")
 
@@ -145,7 +170,6 @@ def _render_dashboard_body() -> None:
 
     # 3. Macro FX & Commodities
     render_section_header("INR FX & Commodities")
-    macro_rows, macro_stale, macro_ts = _load_macro_commodities()
     if macro_stale:
         st.warning(f"Showing cached FX/commodity snapshot from {macro_ts}.")
 
@@ -166,9 +190,6 @@ def _render_dashboard_body() -> None:
 
     # 4. Nifty 50 Breadth + Top Gainers & Losers
     render_section_header("Nifty 50 Market Breadth & Top Movers")
-    with st.spinner("Loading Nifty 50 breadth and movers..."):
-        breadth, breadth_stale, breadth_ts = _load_breadth_and_movers()
-
     if breadth_stale:
         st.warning(f"Showing cached Nifty 50 breadth/movers from {breadth_ts}.")
 
@@ -181,20 +202,22 @@ def _render_dashboard_body() -> None:
         adv_pct = adv / total * 100
         dec_pct = dec / total * 100
         unc_pct = unc / total * 100
+        src_safe = html.escape(str(breadth.get("source", "N/A")))
+        ts_safe = html.escape(str(breadth_ts))
         st.markdown(
             f"""
-            <div style="margin-bottom:6px; font-size:0.82rem;">
-                <span style="color:{COLOR_UP}; font-weight:700;">Advances: {adv} ({adv_pct:.0f}%)</span>
+            <div style="margin-bottom:6px; font-size:0.84rem;">
+                <span class="it-mono" style="color:{pal['up']}; font-weight:600;">Advances: {adv} ({adv_pct:.0f}%)</span>
                 &nbsp;|&nbsp;
-                <span style="color:{COLOR_DOWN}; font-weight:700;">Declines: {dec} ({dec_pct:.0f}%)</span>
+                <span class="it-mono" style="color:{pal['down']}; font-weight:600;">Declines: {dec} ({dec_pct:.0f}%)</span>
                 &nbsp;|&nbsp;
-                <span style="color:{COLOR_FLAT};">Unchanged: {unc}</span>
-                <span style="color:#7A8089; float:right;">Source: {breadth.get('source', 'N/A')} | Updated: {breadth_ts}</span>
+                <span class="it-mono" style="color:{pal['muted']};">Unchanged: {unc}</span>
+                <span style="color:{pal['muted']}; float:right; font-size:0.78rem;">Source: {src_safe} | Updated: {ts_safe}</span>
             </div>
-            <div style="display:flex; height:10px; width:100%; border-radius:2px; overflow:hidden; margin-bottom:12px;">
-                <div style="width:{adv_pct:.1f}%; background:{COLOR_UP};"></div>
-                <div style="width:{unc_pct:.1f}%; background:{COLOR_FLAT};"></div>
-                <div style="width:{dec_pct:.1f}%; background:{COLOR_DOWN};"></div>
+            <div style="display:flex; height:8px; width:100%; border-radius:999px; overflow:hidden; margin-bottom:12px;">
+                <div style="width:{adv_pct:.1f}%; background:{pal['up']};"></div>
+                <div style="width:{unc_pct:.1f}%; background:{pal['muted']};"></div>
+                <div style="width:{dec_pct:.1f}%; background:{pal['down']};"></div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -202,15 +225,14 @@ def _render_dashboard_body() -> None:
 
     col_gain, col_lose = st.columns(2)
     with col_gain:
-        st.markdown(f"<strong style='color:{COLOR_UP};'>TOP 5 GAINERS (NIFTY 50)</strong>", unsafe_allow_html=True)
+        st.markdown(f"<strong style='color:{pal['up']}; font-size:0.85rem;'>TOP 5 GAINERS (NIFTY 50)</strong>", unsafe_allow_html=True)
         _render_movers_table(breadth.get("gainers", []), "nifty50_top_gainers.csv")
     with col_lose:
-        st.markdown(f"<strong style='color:{COLOR_DOWN};'>TOP 5 LOSERS (NIFTY 50)</strong>", unsafe_allow_html=True)
+        st.markdown(f"<strong style='color:{pal['down']}; font-size:0.85rem;'>TOP 5 LOSERS (NIFTY 50)</strong>", unsafe_allow_html=True)
         _render_movers_table(breadth.get("losers", []), "nifty50_top_losers.csv")
 
     # 5. Global Indices Table
     render_section_header("Global Markets Snapshot")
-    glob_rows, glob_stale, glob_ts = _load_global_indices()
     if glob_stale:
         st.warning(f"Showing cached global indices from {glob_ts}.")
     if glob_rows:
@@ -227,7 +249,7 @@ def _render_dashboard_body() -> None:
             ]
         )
         st.dataframe(
-            style_change_dataframe(g_df, ["Chg", "% Chg"]),
+            style_change_dataframe(g_df, ["Chg", "% Chg"], ["Last", "Chg", "% Chg"]),
             width="stretch",
             hide_index=True,
         )
@@ -248,6 +270,9 @@ def render_home() -> None:
         )
     with ctrl_col2:
         if st.button("Refresh Now", width="stretch"):
+            from utils.cache import terminal_cache
+
+            terminal_cache.clear_kv_cache()
             st.cache_data.clear()
             st.rerun()
 
