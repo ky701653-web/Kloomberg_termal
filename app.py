@@ -5,7 +5,7 @@ Run locally with: streamlit run app.py
 
 from __future__ import annotations
 
-from typing import Callable, Dict, List, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 import streamlit as st
 from dotenv import load_dotenv
@@ -95,20 +95,34 @@ MODULE_RENDERERS: Dict[str, Callable[[], None]] = {
 }
 
 
+def _build_flat_menu() -> Tuple[List[str], List[Optional[str]]]:
+    """Build a single unified option_menu list with '---' dividers between module groups."""
+    options: List[str] = []
+    icons: List[Optional[str]] = []
+    group_list = list(MODULE_GROUPS.values())
+    for g_idx, mod_items in enumerate(group_list):
+        for name, ic in mod_items:
+            options.append(name)
+            icons.append(ic)
+        if g_idx < len(group_list) - 1:
+            options.append("---")
+            icons.append(None)
+    return options, icons
+
+
 def _on_menu_select(menu_key: str) -> None:
     chosen = st.session_state.get(menu_key)
-    if chosen and chosen in MODULE_RENDERERS:
+    if chosen and chosen != "---" and chosen in MODULE_RENDERERS:
         st.session_state["active_module"] = chosen
 
 
 def main() -> None:
-    """Render the terminal shell, theme switcher, grouped option_menu sidebar, and active view."""
+    """Render the terminal shell, theme switcher, unified option_menu sidebar, and active view."""
     if "active_module" not in st.session_state:
         st.session_state["active_module"] = "Home / Market Overview"
     if "theme_mode" not in st.session_state:
         st.session_state["theme_mode"] = "dark"
 
-    # Sidebar Theme Toggle & Grouped Option Menu
     with st.sidebar:
         theme_choice = st.radio(
             "Appearance",
@@ -122,14 +136,14 @@ def main() -> None:
 
         st.markdown(
             f"<div style='color:{pal['text']}; font-weight:700; font-size:1.05rem; "
-            f"letter-spacing:0.02em; margin:8px 0 4px 0;'>"
+            f"letter-spacing:0.02em; margin:8px 0 8px 0;'>"
             f"<span style='color:{pal['accent']};'>●</span> IND TERMINAL</div>",
             unsafe_allow_html=True,
         )
 
         menu_styles = {
             "container": {
-                "padding": "4px",
+                "padding": "6px",
                 "background-color": pal["surface"],
                 "border": f"1px solid {pal['border']}",
                 "border-radius": "12px",
@@ -154,22 +168,20 @@ def main() -> None:
             },
         }
 
+        all_options, all_icons = _build_flat_menu()
         active = st.session_state["active_module"]
-        for idx, (group_name, mod_items) in enumerate(MODULE_GROUPS.items()):
-            st.caption(group_name)
-            labels = [m for m, _ in mod_items]
-            icons = [ic for _, ic in mod_items]
-            manual_idx = labels.index(active) if active in labels else -1
-            option_menu(
-                menu_title=None,
-                options=labels,
-                icons=icons,
-                default_index=manual_idx if manual_idx >= 0 else 0,
-                manual_select=manual_idx,
-                styles=menu_styles,
-                key=f"nav_group_{idx}_{st.session_state['theme_mode']}",
-                on_change=_on_menu_select,
-            )
+        active_idx = all_options.index(active) if active in all_options else 0
+
+        option_menu(
+            menu_title=None,
+            options=all_options,
+            icons=all_icons,
+            default_index=active_idx,
+            manual_select=active_idx,
+            styles=menu_styles,
+            key=f"main_nav_{st.session_state['theme_mode']}",
+            on_change=_on_menu_select,
+        )
 
     inject_bloomberg_css(st.session_state["theme_mode"])
 

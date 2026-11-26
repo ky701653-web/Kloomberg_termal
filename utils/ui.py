@@ -140,6 +140,17 @@ def inject_bloomberg_css(theme: Optional[str] = None) -> None:
         section[data-testid="stSidebar"] * {{
             color: var(--text);
         }}
+        /* Preserve Streamlit Material Symbols icon font (prevents literal 'keyboard_double...' text) */
+        [data-testid="stIconMaterial"],
+        .material-symbols-rounded,
+        .material-icons {{
+            font-family: 'Material Symbols Rounded', 'Material Icons', sans-serif !important;
+            font-weight: normal !important;
+            font-style: normal !important;
+            line-height: 1 !important;
+            letter-spacing: normal !important;
+            text-transform: none !important;
+        }}
         section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p {{
             color: var(--muted) !important;
             font-size: 0.72rem !important;
@@ -150,16 +161,17 @@ def inject_bloomberg_css(theme: Optional[str] = None) -> None:
             margin-bottom: calc(var(--space) * 0.5) !important;
         }}
         .block-container {{
-            padding-top: calc(var(--space) * 2) !important;
+            padding-top: 4rem !important;
             padding-bottom: calc(var(--space) * 4) !important;
             max-width: 100%;
         }}
 
-        /* Global readable text across Streamlit widgets */
-        .stApp p, .stApp li, .stApp span, .stApp label,
+        /* Global readable text across Streamlit widgets (excluding icon spans) */
+        .stApp p, .stApp li, .stApp label,
         .stApp h1, .stApp h2, .stApp h3, .stApp h4,
         [data-testid="stWidgetLabel"] p,
-        [data-testid="stMarkdownContainer"] p {{
+        [data-testid="stMarkdownContainer"] p,
+        [data-testid="stMarkdownContainer"] span {{
             color: var(--text);
             font-family: var(--font-ui);
         }}
@@ -208,19 +220,32 @@ def inject_bloomberg_css(theme: Optional[str] = None) -> None:
             border-radius: 8px !important;
             font-family: var(--font-ui) !important;
         }}
+        div[data-testid="stTextInput"] input::placeholder,
+        div[data-testid="stNumberInput"] input::placeholder {{
+            color: var(--muted) !important;
+            opacity: 0.9 !important;
+        }}
         div[data-testid="stTextInput"] input:focus,
         div[data-testid="stNumberInput"] input:focus {{
             border-color: var(--accent) !important;
             box-shadow: 0 0 0 1px var(--accent) !important;
         }}
+        div[data-testid="stSelectbox"] [data-baseweb="select"] > div,
+        div[data-testid="stSelectbox"] [data-baseweb="select"] > div > div,
+        div[data-testid="stMultiSelect"] [data-baseweb="select"] > div,
+        div[data-testid="stMultiSelect"] [data-baseweb="select"] > div > div,
         div[data-baseweb="select"] > div,
-        div[data-baseweb="input"] > div {{
+        div[data-baseweb="select"] > div > div,
+        div[data-baseweb="input"] > div,
+        div[data-baseweb="base-input"],
+        div[data-baseweb="base-input"] > input {{
             background-color: var(--surface) !important;
             color: var(--text) !important;
             border-color: var(--border) !important;
             border-radius: 8px !important;
         }}
         div[data-baseweb="select"] span,
+        div[data-baseweb="select"] div,
         div[data-baseweb="select"] svg {{
             color: var(--text) !important;
             fill: var(--text) !important;
@@ -238,10 +263,29 @@ def inject_bloomberg_css(theme: Optional[str] = None) -> None:
             background-color: var(--surface-alt) !important;
         }}
 
+        /* Inline code & option_menu iframe rounding */
+        .stApp code {{
+            background-color: var(--surface-alt) !important;
+            color: var(--text) !important;
+            border: 1px solid var(--border) !important;
+            border-radius: 4px !important;
+            padding: 1px 5px !important;
+            font-family: var(--font-mono) !important;
+            font-size: 0.85em !important;
+        }}
+        iframe[title="streamlit_option_menu.option_menu"] {{
+            background-color: var(--surface) !important;
+            border-radius: var(--radius) !important;
+        }}
+
         /* Radio, checkbox, expander, container cards */
         [data-testid="stRadio"] label span,
         [data-testid="stCheckbox"] label span {{
             color: var(--text) !important;
+        }}
+        [data-testid="stRadio"] div[role="radiogroup"] > label > div:first-child {{
+            background-color: var(--surface-alt) !important;
+            border: 1px solid var(--muted) !important;
         }}
         div[data-testid="stExpander"] {{
             background-color: var(--surface) !important;
@@ -517,6 +561,33 @@ def render_metric_card(
         """,
         unsafe_allow_html=True,
     )
+
+
+def render_plotly(fig: Any) -> None:
+    """Render a Plotly figure with explicit Dark/Light colors and theme=None (bypasses config.toml dark override)."""
+    pt = get_plotly_theme()
+    fig.update_layout(
+        template=pt["template"],
+        paper_bgcolor=pt["paper_bgcolor"],
+        plot_bgcolor=pt["plot_bgcolor"],
+        font=dict(family="Inter, sans-serif", color=pt["font_color"]),
+        legend=dict(font=dict(color=pt["font_color"])),
+    )
+    fig.update_xaxes(
+        showgrid=True,
+        gridcolor=pt["gridcolor"],
+        zeroline=False,
+        tickfont=dict(color=pt["muted"]),
+        title_font=dict(color=pt["font_color"]),
+    )
+    fig.update_yaxes(
+        showgrid=True,
+        gridcolor=pt["gridcolor"],
+        zeroline=False,
+        tickfont=dict(color=pt["muted"]),
+        title_font=dict(color=pt["font_color"]),
+    )
+    st.plotly_chart(fig, width="stretch", theme=None)
 
 
 def render_csv_download(df: pd.DataFrame, filename: str, label: str = "Export CSV") -> None:

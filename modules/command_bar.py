@@ -225,8 +225,13 @@ def render_command_bar() -> None:
             if parsed.query:
                 st.session_state["active_query"] = parsed.query
             if parsed.target_module:
+                prev_mod = st.session_state.get("active_module")
                 st.session_state["active_module"] = parsed.target_module
-            if parsed.message:
+                if parsed.message:
+                    st.session_state["cmd_feedback"] = ("ok", parsed.message)
+                if prev_mod != parsed.target_module:
+                    st.rerun()
+            elif parsed.message:
                 st.session_state["cmd_feedback"] = ("ok", parsed.message)
         else:
             st.session_state["cmd_feedback"] = ("error", parsed.message)

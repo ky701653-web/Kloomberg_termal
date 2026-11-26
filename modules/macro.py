@@ -9,7 +9,7 @@ import streamlit as st
 from data.macro_news_mf import fetch_macro_dashboard
 from data.market_data import fetch_yfinance_quotes
 from utils.formatting import format_number
-from utils.ui import get_plotly_theme, render_csv_download, render_metric_card, render_section_header
+from utils.ui import get_plotly_theme, render_csv_download, render_metric_card, render_plotly, render_section_header
 
 
 def render_macro() -> None:
@@ -90,7 +90,7 @@ def render_macro() -> None:
         )
         fig_wb.update_xaxes(showgrid=True, gridcolor=ptheme["gridcolor"], zeroline=False)
         fig_wb.update_yaxes(showgrid=True, gridcolor=ptheme["gridcolor"], zeroline=False)
-        st.plotly_chart(fig_wb, width="stretch")
+        render_plotly(fig_wb)
 
     # FRED Series (when FRED_API_KEY is configured)
     fred_series = bundle.get("fred_series", {})
@@ -129,7 +129,7 @@ def render_macro() -> None:
         )
         fig_f.update_xaxes(showgrid=True, gridcolor=ptheme_f["gridcolor"], zeroline=False)
         fig_f.update_yaxes(showgrid=True, gridcolor=ptheme_f["gridcolor"], zeroline=False)
-        st.plotly_chart(fig_f, width="stretch")
+        render_plotly(fig_f)
 
     # RBI & MOSPI Reference
     render_section_header("RBI & MOSPI Policy Benchmarks")

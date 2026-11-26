@@ -8,7 +8,7 @@ import streamlit as st
 
 from data.market_data import SECTOR_INDICES, fetch_nifty50_heatmap_data, fetch_yfinance_quotes
 from utils.formatting import format_number, format_pct
-from utils.ui import get_plotly_theme, get_theme_palette, render_csv_download, render_section_header, style_change_dataframe
+from utils.ui import get_plotly_theme, get_theme_palette, render_csv_download, render_plotly, render_section_header, style_change_dataframe
 
 
 def render_heatmap() -> None:
@@ -50,7 +50,7 @@ def render_heatmap() -> None:
                 height=580,
                 margin=dict(l=8, r=8, t=24, b=8),
             )
-            st.plotly_chart(fig, width="stretch")
+            render_plotly(fig)
             render_csv_download(
                 df[["name", "symbol", "sector", "price", "change", "pct_change"]],
                 "nifty50_heatmap.csv",
@@ -89,7 +89,7 @@ def render_heatmap() -> None:
                 height=420,
                 margin=dict(l=8, r=8, t=20, b=8),
             )
-            st.plotly_chart(fig_s, width="stretch")
+            render_plotly(fig_s)
 
             disp = pd.DataFrame(
                 [

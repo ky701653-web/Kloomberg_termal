@@ -18,7 +18,7 @@ from utils.indicators import (
     compute_supertrend,
     compute_vwap,
 )
-from utils.ui import get_plotly_theme, render_csv_download, render_section_header
+from utils.ui import get_plotly_theme, render_csv_download, render_plotly, render_section_header
 
 TIMEFRAMES = {
     "5D (15m)": ("5d", "15m"),
@@ -219,7 +219,7 @@ def render_charting() -> None:
     fig.update_xaxes(showgrid=True, gridcolor=ptheme["gridcolor"], zeroline=False)
     fig.update_yaxes(showgrid=True, gridcolor=ptheme["gridcolor"], zeroline=False)
     fig.update_yaxes(title_text="Price (₹)", row=1, col=1)
-    st.plotly_chart(fig, width="stretch")
+    render_plotly(fig)
 
     # Multi-ticker / Nifty 50 Rebased Comparison
     compare_list = [normalize_indian_ticker(t) for t in compare_raw.split(",") if t.strip()]
@@ -248,7 +248,7 @@ def render_charting() -> None:
                 )
                 fig_cmp.update_xaxes(showgrid=True, gridcolor=ptheme["gridcolor"], zeroline=False)
                 fig_cmp.update_yaxes(showgrid=True, gridcolor=ptheme["gridcolor"], zeroline=False)
-                st.plotly_chart(fig_cmp, width="stretch")
+                render_plotly(fig_cmp)
 
     export_df = df.reset_index()
     render_csv_download(export_df, f"{ticker}_ohlcv.csv", label="Download OHLCV CSV")

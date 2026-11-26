@@ -8,7 +8,7 @@ import streamlit as st
 
 from data.nse_data import fetch_fii_dii_flows
 from utils.formatting import format_inr
-from utils.ui import get_plotly_theme, render_csv_download, render_metric_card, render_section_header, style_change_dataframe
+from utils.ui import get_plotly_theme, render_csv_download, render_metric_card, render_plotly, render_section_header, style_change_dataframe
 
 
 def render_fii_dii() -> None:
@@ -64,7 +64,7 @@ def render_fii_dii() -> None:
     )
     fig.update_xaxes(showgrid=True, gridcolor=ptheme["gridcolor"], zeroline=False)
     fig.update_yaxes(showgrid=True, gridcolor=ptheme["gridcolor"], zeroline=False)
-    st.plotly_chart(fig, width="stretch")
+    render_plotly(fig)
 
     disp = pd.DataFrame(
         {

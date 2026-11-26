@@ -11,7 +11,7 @@ from data.market_data import fetch_ohlcv
 from modules.command_bar import normalize_indian_ticker
 from utils.backtester import run_ma_crossover_backtest, run_rsi_backtest
 from utils.formatting import format_inr, format_pct
-from utils.ui import get_plotly_theme, render_csv_download, render_metric_card, render_section_header
+from utils.ui import get_plotly_theme, render_csv_download, render_metric_card, render_plotly, render_section_header
 
 
 def render_backtesting() -> None:
@@ -114,7 +114,7 @@ def render_backtesting() -> None:
     )
     fig.update_xaxes(showgrid=True, gridcolor=ptheme["gridcolor"], zeroline=False)
     fig.update_yaxes(showgrid=True, gridcolor=ptheme["gridcolor"], zeroline=False)
-    st.plotly_chart(fig, width="stretch")
+    render_plotly(fig)
 
     render_section_header("Executed Trade Log (1-Bar Lagged Execution • No Lookahead)")
     if trades:

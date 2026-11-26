@@ -9,7 +9,7 @@ import streamlit as st
 from data.market_data import fetch_yfinance_quotes
 from data.nse_data import fetch_option_chain
 from utils.formatting import format_indian_commas, format_number
-from utils.ui import get_plotly_theme, render_csv_download, render_metric_card, render_section_header
+from utils.ui import get_plotly_theme, render_csv_download, render_metric_card, render_plotly, render_section_header
 
 
 def render_options_fno() -> None:
@@ -107,7 +107,7 @@ def render_options_fno() -> None:
         )
         fig_oi.update_xaxes(showgrid=True, gridcolor=ptheme["gridcolor"], zeroline=False)
         fig_oi.update_yaxes(showgrid=True, gridcolor=ptheme["gridcolor"], zeroline=False)
-        st.plotly_chart(fig_oi, width="stretch")
+        render_plotly(fig_oi)
 
     with tab_chain:
         chain_disp = pd.DataFrame(
@@ -154,6 +154,6 @@ def render_options_fno() -> None:
             )
             fig_mp.update_xaxes(showgrid=True, gridcolor=ptheme["gridcolor"], zeroline=False)
             fig_mp.update_yaxes(showgrid=True, gridcolor=ptheme["gridcolor"], zeroline=False)
-            st.plotly_chart(fig_mp, width="stretch")
+            render_plotly(fig_mp)
         else:
             st.info("Max pain curve unavailable.")

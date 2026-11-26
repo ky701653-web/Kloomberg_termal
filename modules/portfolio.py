@@ -14,7 +14,7 @@ from modules.command_bar import normalize_indian_ticker
 from utils.cache import terminal_cache
 from utils.formatting import format_inr, format_pct
 from utils.portfolio_math import compute_portfolio_metrics, compute_xirr, estimate_indian_capital_gains
-from utils.ui import get_plotly_theme, render_csv_download, render_metric_card, render_section_header, style_change_dataframe
+from utils.ui import get_plotly_theme, render_csv_download, render_metric_card, render_plotly, render_section_header, style_change_dataframe
 
 SAMPLE_CSV = (
     "symbol,qty,buy_price,buy_date,notes\n"
@@ -232,7 +232,7 @@ def render_portfolio() -> None:
             height=340,
             margin=dict(l=8, r=8, t=12, b=8),
         )
-        st.plotly_chart(fig_pie, width="stretch")
+        render_plotly(fig_pie)
 
     with col_tax:
         render_section_header("Indian Capital Gains Tax Estimate (Unrealized)")
