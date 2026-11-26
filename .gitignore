@@ -1,0 +1,19 @@
+# Environment & secrets
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Local SQLite cache
+cache/*.db
+cache/*.db-wal
+cache/*.db-shm
+
+# IDEs
+.idea/
+.vscode/
+.DS_Store
