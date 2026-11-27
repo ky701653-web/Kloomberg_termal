@@ -29,22 +29,32 @@ RSS_FEEDS: List[Tuple[str, str]] = [
 # Reference RBI / MOSPI macro indicators (updated with live FRED / World Bank / yfinance where available)
 RBI_MOSPI_REFERENCE: List[Dict[str, str]] = [
     {
-        "Indicator": "RBI Policy Repo Rate",
-        "Value": "6.50% (check RBI MPC)",
+        "Indicator": "RBI Policy Repo Rate & MPC",
+        "Value": "Check RBI DBIE / Latest MPC Release",
         "Source": "Reserve Bank of India (RBI)",
+        "Source URL": "https://dbie.rbi.org.in",
         "Frequency": "Bi-monthly MPC",
     },
     {
         "Indicator": "India 10Y G-Sec Benchmark",
-        "Value": "~6.80% - 7.05% range",
+        "Value": "RBI / CCIL Reference Curve",
         "Source": "RBI / CCIL",
+        "Source URL": "https://www.ccilindia.com",
         "Frequency": "Daily",
     },
     {
-        "Indicator": "MOSPI CPI / IIP Releases",
-        "Value": "Monthly Official Release",
-        "Source": "MOSPI (mospi.gov.in)",
-        "Frequency": "Monthly",
+        "Indicator": "MOSPI CPI Inflation / IIP / GDP",
+        "Value": "Monthly & Quarterly Official Releases",
+        "Source": "MOSPI (Government of India)",
+        "Source URL": "https://mospi.gov.in",
+        "Frequency": "Monthly / Quarterly",
+    },
+    {
+        "Indicator": "FRED Macro Series (US & India)",
+        "Value": "Live via free FRED_API_KEY",
+        "Source": "St. Louis Fed (FRED)",
+        "Source URL": "https://fred.stlouisfed.org/docs/api/api_key.html",
+        "Frequency": "Daily / Monthly",
     },
 ]
 
@@ -176,8 +186,27 @@ def _fetch_world_bank_series(indicator: str, label: str) -> Optional[Dict[str, A
     return {"label": label, "latest": points[-1], "history": points}
 
 
+def _fetch_rbi_press_releases() -> List[Dict[str, str]]:
+    """Fetch latest official RBI press releases via RBI public RSS feed."""
+    resp = requests.get(
+        "https://www.rbi.org.in/pressreleases_rss.xml",
+        headers={"User-Agent": USER_AGENT},
+        timeout=10,
+    )
+    resp.raise_for_status()
+    parsed = feedparser.parse(resp.content)
+    releases: List[Dict[str, str]] = []
+    for entry in parsed.entries[:10]:
+        title = str(entry.get("title", "")).strip()
+        link = str(entry.get("link", "")).strip()
+        published = str(entry.get("published", "")).strip()
+        if title:
+            releases.append({"title": title, "link": link, "published": published})
+    return releases
+
+
 def fetch_macro_dashboard(ttl_seconds: int = 3600) -> Tuple[Dict[str, Any], bool, str]:
-    """Fetch India & Global macro series from FRED (if key set), World Bank, and Yahoo Finance."""
+    """Fetch India & Global macro series from FRED (if key set), World Bank, RBI RSS, and yfinance."""
     cache_key = "macro_dashboard_bundle"
     cached = terminal_cache.get(cache_key, allow_stale=False)
     if cached is not None:
@@ -236,14 +265,39 @@ def fetch_macro_dashboard(ttl_seconds: int = 3600) -> Tuple[Dict[str, Any], bool
         "NY.GDP.MKTP.KD.ZG": "India GDP Growth (Annual %)",
         "FP.CPI.TOTL.ZG": "India CPI Inflation (Annual %)",
         "FI.RES.TOTL.CD": "India Total Forex Reserves (USD)",
+        "NE.TRD.GNFS.ZS": "India Trade (% of GDP)",
     }
-    for code, label in wb_specs.items():
+    rbi_releases: List[Dict[str, str]] = []
+
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        wb_futs = {pool.submit(_fetch_world_bank_series, code, label): code for code, label in wb_specs.items()}
+        rbi_fut = pool.submit(_fetch_rbi_press_releases)
+
+        for fut, code in wb_futs.items():
+            try:
+                res = fut.result()
+                if res:
+                    wb_series[code] = res
+            except Exception:
+                continue
+
         try:
-            res = _fetch_world_bank_series(code, label)
-            if res:
-                wb_series[code] = res
-        except Exception:
-            continue
+            rbi_releases = rbi_fut.result()
+            if rbi_releases:
+                terminal_cache.record_source_status(
+                    source_name="RBI Press Releases RSS",
+                    status="OK",
+                    delay_note="Official Reserve Bank of India RSS feed",
+                    success=True,
+                )
+        except Exception as exc:  # noqa: BLE001
+            terminal_cache.record_source_status(
+                source_name="RBI Press Releases RSS",
+                status="ERROR",
+                delay_note="Official Reserve Bank of India RSS feed",
+                success=False,
+                error_msg=str(exc),
+            )
 
     if wb_series:
         terminal_cache.record_source_status(
@@ -258,6 +312,7 @@ def fetch_macro_dashboard(ttl_seconds: int = 3600) -> Tuple[Dict[str, Any], bool
         "fred_series": fred_series,
         "fred_error": fred_error,
         "world_bank": wb_series,
+        "rbi_releases": rbi_releases,
         "reference": RBI_MOSPI_REFERENCE,
     }
     ts_ist = terminal_cache.set(cache_key, bundle, ttl_seconds=ttl_seconds)

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import html
+
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
@@ -9,12 +11,21 @@ import streamlit as st
 from data.macro_news_mf import fetch_macro_dashboard
 from data.market_data import fetch_yfinance_quotes
 from utils.formatting import format_number
-from utils.ui import get_plotly_theme, render_csv_download, render_metric_card, render_plotly, render_section_header
+from utils.ui import (
+    get_plotly_theme,
+    get_theme_palette,
+    render_csv_download,
+    render_metric_card,
+    render_plotly,
+    render_section_header,
+    sanitize_http_url,
+)
 
 
 def render_macro() -> None:
-    """Render India & Global Macro Dashboard."""
+    """Render India & Global Macro Dashboard with live sources & setup guide."""
     render_section_header("India & Global Macro Dashboard (RBI / MOSPI / World Bank / FRED)")
+    pal = get_theme_palette()
 
     with st.spinner("Loading macro indicators..."):
         bundle, is_stale, ts_ist = fetch_macro_dashboard(ttl_seconds=3600)
@@ -36,10 +47,16 @@ def render_macro() -> None:
         st.caption(f"Updated: {ts_ist}")
 
     if not bundle.get("fred_enabled"):
-        st.info(
-            "Optional: Add a free `FRED_API_KEY` to `.env` (or Streamlit Secrets) to enable live FRED series "
-            "(US Fed Funds, US 10Y, India CPI index, India 10Y rate, FRED USD/INR)."
-        )
+        with st.expander("How to Enable Live FRED Macro Series (Free — Takes 2 Minutes)", expanded=False):
+            st.markdown(
+                """
+                1. Go to **[fred.stlouisfed.org/docs/api/api_key.html](https://fred.stlouisfed.org/docs/api/api_key.html)** and create a free account.
+                2. Click **Request API Key** and copy your 32-character key.
+                3. **Locally**: open `.env` in your project folder and set `FRED_API_KEY=your_key_here`.
+                4. **Streamlit Cloud**: open **App Settings → Secrets** and add `FRED_API_KEY = "your_key_here"`.
+                5. Click **Clear SQLite Cache** in *Data Source Status* (or refresh) to load US Fed Funds, US 10Y, India 10Y, India CPI, and FRED USD/INR.
+                """
+            )
 
     if live_macro:
         cols = st.columns(len(live_macro))
@@ -55,7 +72,7 @@ def render_macro() -> None:
     # World Bank India Macro Series
     wb = bundle.get("world_bank", {})
     if wb:
-        render_section_header("India Macro Indicators (World Bank Open Data)")
+        render_section_header("India Macro Indicators (World Bank Open Data — Free, No Key)")
         wb_cols = st.columns(len(wb))
         for col, (_, info) in zip(wb_cols, wb.items()):
             latest = info["latest"]
@@ -81,15 +98,7 @@ def render_macro() -> None:
                 name=wb[sel_wb]["label"],
             )
         )
-        fig_wb.update_layout(
-            template=ptheme["template"],
-            paper_bgcolor=ptheme["paper_bgcolor"],
-            plot_bgcolor=ptheme["plot_bgcolor"],
-            font=dict(family="Inter, sans-serif", color=ptheme["font_color"]),
-            height=320,
-        )
-        fig_wb.update_xaxes(showgrid=True, gridcolor=ptheme["gridcolor"], zeroline=False)
-        fig_wb.update_yaxes(showgrid=True, gridcolor=ptheme["gridcolor"], zeroline=False)
+        fig_wb.update_layout(height=320)
         render_plotly(fig_wb)
 
     # FRED Series (when FRED_API_KEY is configured)
@@ -120,21 +129,37 @@ def render_macro() -> None:
                 line=dict(color=ptheme_f["up"], width=2),
             )
         )
-        fig_f.update_layout(
-            template=ptheme_f["template"],
-            paper_bgcolor=ptheme_f["paper_bgcolor"],
-            plot_bgcolor=ptheme_f["plot_bgcolor"],
-            font=dict(family="Inter, sans-serif", color=ptheme_f["font_color"]),
-            height=320,
-        )
-        fig_f.update_xaxes(showgrid=True, gridcolor=ptheme_f["gridcolor"], zeroline=False)
-        fig_f.update_yaxes(showgrid=True, gridcolor=ptheme_f["gridcolor"], zeroline=False)
+        fig_f.update_layout(height=320)
         render_plotly(fig_f)
 
-    # RBI & MOSPI Reference
-    render_section_header("RBI & MOSPI Policy Benchmarks")
+    # Official RBI Press Releases RSS (live, no key)
+    rbi_releases = bundle.get("rbi_releases", [])
+    if rbi_releases:
+        render_section_header("Latest RBI Official Press Releases (Live RSS)")
+        for item in rbi_releases[:6]:
+            safe_title = html.escape(str(item["title"]))
+            safe_pub = html.escape(str(item["published"]))
+            safe_link = sanitize_http_url(str(item["link"]))
+            st.markdown(
+                f"""
+                <div class="it-feed-card" style="border-left: 3px solid {pal['accent']};">
+                    <div class="it-feed-meta"><span>Reserve Bank of India</span><span class="it-mono">{safe_pub}</span></div>
+                    <div class="it-feed-title"><a href="{safe_link}" target="_blank" rel="noopener noreferrer">{safe_title}</a></div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+    # RBI & MOSPI Reference with clickable source links
+    render_section_header("Official Macro Data Sources & Portals")
     ref_df = pd.DataFrame(bundle.get("reference", []))
     if not ref_df.empty:
-        st.dataframe(ref_df, width="stretch", hide_index=True)
+        st.dataframe(
+            ref_df,
+            width="stretch",
+            hide_index=True,
+            column_config={
+                "Source URL": st.column_config.LinkColumn("Open Source", display_text="Open Portal ↗")
+            },
+        )
         render_csv_download(ref_df, "india_macro_reference.csv", label="Download Macro Reference CSV")
-    st.caption("Official portals: [RBI Database on Indian Economy](https://dbie.rbi.org.in) • [MOSPI](https://mospi.gov.in)")
